@@ -1,0 +1,16 @@
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/BukkitPlugin.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/commands/CoreCommand.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/commands/GrantCommand.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/commands/RankCommand.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/config/DatabaseConfig.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/dialogs/CreateRankDialog.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/dialogs/DeleteRankDialog.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/dialogs/EditRankDialog.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/dialogs/GrantListDialog.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/dialogs/GrantPlayerDialog.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/dialogs/RankHubDialog.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/dialogs/RankListDialog.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/listener/ChatListener.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/listener/CorePluginMessageListener.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/listener/PlayerListener.java
+/home/vwinter/Projects/core/bukkit/src/main/java/club/catmc/core/bukkit/manager/PlayerManager.java

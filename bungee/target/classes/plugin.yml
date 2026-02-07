@@ -1,0 +1,10 @@
+name: CoreBungee
+version: 1.0.0
+main: club.catmc.core.bungee.BungeePlugin
+author: CatMC
+description: Core BungeeCord plugin with ACF commands
+
+permissions:
+  core.command:
+    description: Allows using core command
+    default: true

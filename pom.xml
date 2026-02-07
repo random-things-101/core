@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>club.catmc</groupId>
+    <artifactId>core</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+    <name>Core</name>
+    <description>Parent POM for shared Bukkit and BungeeCord plugins</description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Dependency Versions -->
+        <paper.version>1.21.11-R0.1-SNAPSHOT</paper.version>
+        <bungeecord.version>1.21-R0.4</bungeecord.version>
+        <acf.version>0.5.1-SNAPSHOT</acf.version>
+        <mysql.version>8.0.33</mysql.version>
+        <annotations.version>24.1.0</annotations.version>
+    </properties>
+
+    <modules>
+        <module>shared</module>
+        <module>bukkit</module>
+        <module>bungee</module>
+    </modules>
+
+    <repositories>
+        <repository>
+            <id>papermc-repo</id>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
+        </repository>
+        <repository>
+            <id>bungeecord-repo</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        </repository>
+        <repository>
+            <id>sonatype</id>
+            <url>https://oss.sonatype.org/content/groups/public/</url>
+        </repository>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+        <repository>
+            <id>aikar</id>
+            <url>https://repo.aikar.co/content/groups/aikar/</url>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Paper API -->
+            <dependency>
+                <groupId>io.papermc.paper</groupId>
+                <artifactId>paper-api</artifactId>
+                <version>${paper.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- BungeeCord API -->
+            <dependency>
+                <groupId>net.md-5</groupId>
+                <artifactId>bungeecord-api</artifactId>
+                <version>${bungeecord.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- MySQL Connector -->
+            <dependency>
+                <groupId>com.mysql</groupId>
+                <artifactId>mysql-connector-j</artifactId>
+                <version>${mysql.version}</version>
+            </dependency>
+
+            <!-- Jetty Annotations (for Paper) -->
+            <dependency>
+                <groupId>org.apache.tomcat</groupId>
+                <artifactId>tomcat-annotations-api</artifactId>
+                <version>10.1.19</version>
+                <scope>provided</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <defaultGoal>clean package</defaultGoal>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.12.1</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

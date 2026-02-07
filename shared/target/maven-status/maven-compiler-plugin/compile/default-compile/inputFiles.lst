@@ -1,0 +1,8 @@
+/home/vwinter/Projects/core/shared/src/main/java/club/catmc/core/shared/db/DatabaseManager.java
+/home/vwinter/Projects/core/shared/src/main/java/club/catmc/core/shared/grant/Grant.java
+/home/vwinter/Projects/core/shared/src/main/java/club/catmc/core/shared/grant/GrantDao.java
+/home/vwinter/Projects/core/shared/src/main/java/club/catmc/core/shared/messaging/PluginMessage.java
+/home/vwinter/Projects/core/shared/src/main/java/club/catmc/core/shared/player/Player.java
+/home/vwinter/Projects/core/shared/src/main/java/club/catmc/core/shared/player/PlayerDao.java
+/home/vwinter/Projects/core/shared/src/main/java/club/catmc/core/shared/rank/Rank.java
+/home/vwinter/Projects/core/shared/src/main/java/club/catmc/core/shared/rank/RankDao.java

@@ -1,0 +1,9 @@
+club/catmc/core/bungee/manager/PlayerManager.class
+club/catmc/core/bungee/manager/MessageManager.class
+club/catmc/core/bungee/commands/ReplyCommand.class
+club/catmc/core/bungee/listener/PluginMessageListener.class
+club/catmc/core/bungee/commands/CoreCommand.class
+club/catmc/core/bungee/commands/MessageCommand.class
+club/catmc/core/bungee/config/DatabaseConfig.class
+club/catmc/core/bungee/BungeePlugin.class
+club/catmc/core/bungee/listener/PlayerListener.class

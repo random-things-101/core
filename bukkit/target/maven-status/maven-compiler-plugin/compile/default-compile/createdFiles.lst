@@ -1,0 +1,16 @@
+club/catmc/core/bukkit/dialogs/EditRankDialog.class
+club/catmc/core/bukkit/dialogs/GrantPlayerDialog.class
+club/catmc/core/bukkit/commands/RankCommand.class
+club/catmc/core/bukkit/dialogs/RankHubDialog.class
+club/catmc/core/bukkit/manager/PlayerManager.class
+club/catmc/core/bukkit/dialogs/DeleteRankDialog.class
+club/catmc/core/bukkit/commands/CoreCommand.class
+club/catmc/core/bukkit/listener/PlayerListener.class
+club/catmc/core/bukkit/listener/CorePluginMessageListener.class
+club/catmc/core/bukkit/dialogs/GrantListDialog.class
+club/catmc/core/bukkit/dialogs/CreateRankDialog.class
+club/catmc/core/bukkit/commands/GrantCommand.class
+club/catmc/core/bukkit/listener/ChatListener.class
+club/catmc/core/bukkit/BukkitPlugin.class
+club/catmc/core/bukkit/config/DatabaseConfig.class
+club/catmc/core/bukkit/dialogs/RankListDialog.class

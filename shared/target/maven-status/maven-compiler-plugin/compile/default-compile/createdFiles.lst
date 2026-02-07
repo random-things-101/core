@@ -1,0 +1,8 @@
+club/catmc/core/shared/messaging/PluginMessage.class
+club/catmc/core/shared/db/DatabaseManager.class
+club/catmc/core/shared/grant/GrantDao.class
+club/catmc/core/shared/rank/Rank.class
+club/catmc/core/shared/grant/Grant.class
+club/catmc/core/shared/player/PlayerDao.class
+club/catmc/core/shared/rank/RankDao.class
+club/catmc/core/shared/player/Player.class

@@ -1,0 +1,9 @@
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/BungeePlugin.java
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/commands/CoreCommand.java
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/commands/MessageCommand.java
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/commands/ReplyCommand.java
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/config/DatabaseConfig.java
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/listener/PlayerListener.java
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/listener/PluginMessageListener.java
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/manager/MessageManager.java
+/home/vwinter/Projects/core/bungee/src/main/java/club/catmc/core/bungee/manager/PlayerManager.java

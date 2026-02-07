@@ -1,0 +1,11 @@
+name: CoreBukkit
+version: 1.0.0
+main: club.catmc.core.bukkit.BukkitPlugin
+author: CatMC
+description: Core Bukkit/Paper plugin with ACF commands
+api-version: "1.21"
+
+permissions:
+  core.command:
+    description: Allows using core command
+    default: true
