@@ -1,53 +1,37 @@
 package club.catmc.core.shared.rank;
 
-import club.catmc.core.shared.db.DatabaseManager;
+import club.catmc.core.shared.api.ApiClient;
+import club.catmc.core.shared.dto.RankDto;
+import com.google.gson.reflect.TypeToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Data Access Object for Rank operations
+ * Data Access Object for Rank operations.
+ * Refactored to use REST API instead of direct database access.
  */
 public class RankDao {
 
     private static final Logger log = LoggerFactory.getLogger(RankDao.class);
-    private final DatabaseManager databaseManager;
+    private final ApiClient apiClient;
 
-    public RankDao(DatabaseManager databaseManager) {
-        this.databaseManager = databaseManager;
+    public RankDao(ApiClient apiClient) {
+        this.apiClient = apiClient;
     }
 
     /**
-     * Creates the ranks table if it doesn't exist
+     * No-op - tables are managed by the API server.
      *
-     * @return CompletableFuture that completes when table is created
+     * @return CompletableFuture that completes immediately
      */
     public CompletableFuture<Void> createTable() {
-        String sql = """
-                CREATE TABLE IF NOT EXISTS ranks (
-                    id VARCHAR(64) PRIMARY KEY,
-                    name VARCHAR(100) NOT NULL,
-                    display_name VARCHAR(100),
-                    prefix VARCHAR(100),
-                    suffix VARCHAR(100),
-                    priority INT DEFAULT 0,
-                    is_default BOOLEAN DEFAULT FALSE,
-                    permissions TEXT
-                )
-                """;
-
-        return databaseManager.executeUpdate(sql).thenRun(() ->
-                log.info("[RankDao] Created ranks table")
-        ).exceptionally(e -> {
-            log.error("[RankDao] Failed to create table: " + e.getMessage());
-            return null;
-        });
+        return CompletableFuture.completedFuture(null);
     }
 
     /**
@@ -57,25 +41,17 @@ public class RankDao {
      * @return CompletableFuture containing Optional<Rank>
      */
     public CompletableFuture<Optional<Rank>> findById(String id) {
-        CompletableFuture<Optional<Rank>> future = new CompletableFuture<>();
-
-        databaseManager.executeQuery(
-                "SELECT * FROM ranks WHERE id = '" + id + "'",
-                resultSet -> {
-                    try {
-                        if (resultSet.next()) {
-                            future.complete(Optional.of(mapResultSetToRank(resultSet)));
-                        } else {
-                            future.complete(Optional.empty());
+        return apiClient.get("/ranks/" + id, RankDto.class)
+                .thenApply(dto -> Optional.ofNullable(dto != null ? mapDtoToRank(dto) : null))
+                .exceptionally(e -> {
+                    if (e.getCause() instanceof ApiClient.ApiClientException) {
+                        ApiClient.ApiClientException ex = (ApiClient.ApiClientException) e.getCause();
+                        if (ex.getStatusCode() == 404) {
+                            return Optional.empty();
                         }
-                    } catch (SQLException e) {
-                        log.error("[RankDao] Error finding rank: " + e.getMessage());
-                        future.completeExceptionally(e);
                     }
-                }
-        );
-
-        return future;
+                    throw new RuntimeException("Failed to find rank", e);
+                });
     }
 
     /**
@@ -84,25 +60,17 @@ public class RankDao {
      * @return CompletableFuture containing Optional<Rank>
      */
     public CompletableFuture<Optional<Rank>> findDefaultRank() {
-        CompletableFuture<Optional<Rank>> future = new CompletableFuture<>();
-
-        databaseManager.executeQuery(
-                "SELECT * FROM ranks WHERE is_default = TRUE LIMIT 1",
-                resultSet -> {
-                    try {
-                        if (resultSet.next()) {
-                            future.complete(Optional.of(mapResultSetToRank(resultSet)));
-                        } else {
-                            future.complete(Optional.empty());
+        return apiClient.get("/ranks/default", RankDto.class)
+                .thenApply(dto -> Optional.ofNullable(dto != null ? mapDtoToRank(dto) : null))
+                .exceptionally(e -> {
+                    if (e.getCause() instanceof ApiClient.ApiClientException) {
+                        ApiClient.ApiClientException ex = (ApiClient.ApiClientException) e.getCause();
+                        if (ex.getStatusCode() == 404) {
+                            return Optional.empty();
                         }
-                    } catch (SQLException e) {
-                        log.error("[RankDao] Error finding default rank: " + e.getMessage());
-                        future.completeExceptionally(e);
                     }
-                }
-        );
-
-        return future;
+                    throw new RuntimeException("Failed to find default rank", e);
+                });
     }
 
     /**
@@ -111,25 +79,17 @@ public class RankDao {
      * @return CompletableFuture containing List<Rank>
      */
     public CompletableFuture<List<Rank>> findAll() {
-        CompletableFuture<List<Rank>> future = new CompletableFuture<>();
-        List<Rank> ranks = new ArrayList<>();
-
-        databaseManager.executeQuery(
-                "SELECT * FROM ranks ORDER BY priority DESC",
-                resultSet -> {
-                    try {
-                        while (resultSet.next()) {
-                            ranks.add(mapResultSetToRank(resultSet));
-                        }
-                        future.complete(ranks);
-                    } catch (SQLException e) {
-                        log.error("[RankDao] Error finding all ranks: " + e.getMessage());
-                        future.completeExceptionally(e);
+        Type listType = new TypeToken<List<RankDto>>() {}.getType();
+        return apiClient.get("/ranks", listType)
+                .thenApply(dtos -> {
+                    List<Rank> ranks = new ArrayList<>();
+                    @SuppressWarnings("unchecked")
+                    List<RankDto> dtoList = (List<RankDto>) dtos;
+                    for (RankDto dto : dtoList) {
+                        ranks.add(mapDtoToRank(dto));
                     }
-                }
-        );
-
-        return future;
+                    return ranks;
+                });
     }
 
     /**
@@ -139,26 +99,18 @@ public class RankDao {
      * @return CompletableFuture that completes when saved
      */
     public CompletableFuture<Void> save(Rank rank) {
-        String permissions = rank.getPermissions() != null ? String.join(",", rank.getPermissions()) : "";
-
-        String sql = String.format(
-                "INSERT INTO ranks (id, name, display_name, prefix, suffix, priority, is_default, permissions) " +
-                        "VALUES ('%s', '%s', '%s', '%s', '%s', %d, %b, '%s') " +
-                        "ON DUPLICATE KEY UPDATE " +
-                        "name = '%s', display_name = '%s', prefix = '%s', suffix = '%s', " +
-                        "priority = %d, is_default = %b, permissions = '%s'",
-                rank.getId(), rank.getName(), rank.getDisplayName(),
-                rank.getPrefix(), rank.getSuffix(), rank.isDefaultRank(), permissions,
-                rank.getName(), rank.getDisplayName(), rank.getPrefix(), rank.getSuffix(),
-                rank.isDefaultRank(), permissions
+        RankDto dto = new RankDto(
+                rank.getId(),
+                rank.getName(),
+                rank.getDisplayName(),
+                rank.getPrefix(),
+                rank.getSuffix(),
+                rank.getPriority(),
+                rank.isDefaultRank(),
+                rank.getPermissions()
         );
-
-        return databaseManager.executeUpdate(sql).thenRun(() ->
-                log.info("[RankDao] Saved rank: " + rank.getId())
-        ).exceptionally(e -> {
-            log.error("[RankDao] Failed to save rank: " + e.getMessage());
-            return null;
-        });
+        return apiClient.post("/ranks", dto, RankDto.SuccessResponse.class)
+                .thenRun(() -> log.info("[RankDao] Saved rank: " + rank.getId()));
     }
 
     /**
@@ -168,41 +120,24 @@ public class RankDao {
      * @return CompletableFuture that completes when deleted
      */
     public CompletableFuture<Void> deleteById(String id) {
-        return databaseManager.executeUpdate(
-                "DELETE FROM ranks WHERE id = '" + id + "'"
-        ).thenRun(() ->
-                log.info("[RankDao] Deleted rank: " + id)
-        ).exceptionally(e -> {
-            log.error("[RankDao] Failed to delete rank: " + e.getMessage());
-            return null;
-        });
+        return apiClient.delete("/ranks/" + id)
+                .thenRun(() -> log.info("[RankDao] Deleted rank: " + id));
     }
 
     /**
-     * Maps a ResultSet to a Rank object
+     * Maps a RankDto to a Rank domain object
      */
-    private Rank mapResultSetToRank(ResultSet resultSet) throws SQLException {
-        String permissionsStr = resultSet.getString("permissions");
-        List<String> permissions = new ArrayList<>();
-
-        if (permissionsStr != null && !permissionsStr.isEmpty()) {
-            String[] parts = permissionsStr.split(",");
-            for (String part : parts) {
-                if (!part.isEmpty()) {
-                    permissions.add(part);
-                }
-            }
-        }
-
-        return new Rank(
-                resultSet.getString("id"),
-                resultSet.getString("name"),
-                resultSet.getString("display_name"),
-                resultSet.getString("prefix"),
-                resultSet.getString("suffix"),
-                resultSet.getInt("priority"),
-                resultSet.getBoolean("is_default"),
-                permissions
+    private Rank mapDtoToRank(RankDto dto) {
+        Rank rank = new Rank(
+                dto.getId(),
+                dto.getName(),
+                dto.getDisplayName(),
+                dto.getPrefix(),
+                dto.getSuffix(),
+                dto.getPriority() != null ? dto.getPriority() : 0,
+                dto.getIsDefault() != null ? dto.getIsDefault() : false,
+                dto.getPermissions()
         );
+        return rank;
     }
 }

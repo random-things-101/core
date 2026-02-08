@@ -1,18 +1,18 @@
 package club.catmc.core.bukkit;
 
 import club.catmc.core.bukkit.commands.CoreCommand;
-import club.catmc.core.bukkit.config.DatabaseConfig;
+import club.catmc.core.bukkit.config.ApiConfig;
 import club.catmc.core.bukkit.listener.ChatListener;
-import club.catmc.core.bukkit.listener.CorePluginMessageListener;
 import club.catmc.core.bukkit.listener.PlayerListener;
 import club.catmc.core.bukkit.manager.PlayerManager;
-import club.catmc.core.shared.db.DatabaseManager;
+import club.catmc.core.shared.api.ApiClient;
 import club.catmc.core.shared.grant.GrantDao;
+import club.catmc.core.shared.punishment.PunishmentDao;
 import club.catmc.core.shared.player.PlayerDao;
 import club.catmc.core.shared.rank.RankDao;
+import club.catmc.core.shared.ws.WebSocketManager;
 import co.aikar.commands.PaperCommandManager;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.plugin.messaging.Messenger;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -21,15 +21,21 @@ import java.util.concurrent.CompletableFuture;
  */
 public class BukkitPlugin extends JavaPlugin {
 
-    private DatabaseManager databaseManager;
+    private ApiClient apiClient;
+    private WebSocketManager wsManager;
     private PaperCommandManager commandManager;
     private PlayerManager playerManager;
     private PlayerDao playerDao;
     private GrantDao grantDao;
     private RankDao rankDao;
+    private PunishmentDao punishmentDao;
 
-    public DatabaseManager getDatabaseManager() {
-        return databaseManager;
+    public ApiClient getApiClient() {
+        return apiClient;
+    }
+
+    public WebSocketManager getWsManager() {
+        return wsManager;
     }
 
     public PaperCommandManager getCommandManager() {
@@ -48,6 +54,10 @@ public class BukkitPlugin extends JavaPlugin {
         return rankDao;
     }
 
+    public PunishmentDao getPunishmentDao() {
+        return punishmentDao;
+    }
+
     @Override
     public void onLoad() {
         getLogger().info("Loading Core Bukkit Plugin...");
@@ -56,37 +66,31 @@ public class BukkitPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         // Load configuration
-        DatabaseConfig dbConfig = loadDatabaseConfig();
+        ApiConfig apiConfig = loadApiConfig();
 
-        // Initialize database manager
-        databaseManager = new DatabaseManager(
-                dbConfig.getHost(),
-                dbConfig.getPort(),
-                dbConfig.getDatabase(),
-                dbConfig.getUsername(),
-                dbConfig.getPassword()
+        // Initialize API client
+        apiClient = new ApiClient(apiConfig.getBaseUrl(), apiConfig.getApiKey());
+        getLogger().info("ApiClient initialized with base URL: " + apiConfig.getBaseUrl());
+
+        // Initialize WebSocket client
+        wsManager = new WebSocketManager(
+            apiConfig.getWsUrl(),
+            "paper",  // Paper server type
+            apiConfig.getServerName(),
+            apiConfig.getApiKey()
         );
+        wsManager.connect();
+        getLogger().info("WebSocketManager initialized as 'paper' server");
 
-        // Connect to database
-        databaseManager.connect().thenCompose(v -> {
-            getLogger().info("Database connection established!");
+        // Initialize DAOs with ApiClient
+        playerDao = new PlayerDao(apiClient);
+        grantDao = new GrantDao(apiClient);
+        rankDao = new RankDao(apiClient);
+        punishmentDao = new PunishmentDao(apiClient);
 
-            // Initialize DAOs
-            playerDao = new PlayerDao(databaseManager);
-            grantDao = new GrantDao(databaseManager);
-            rankDao = new RankDao(databaseManager);
-
-            // Create tables
-            CompletableFuture<Void> createPlayers = playerDao.createTable();
-            CompletableFuture<Void> createGrants = grantDao.createTable();
-            CompletableFuture<Void> createRanks = rankDao.createTable();
-
-            return CompletableFuture.allOf(createPlayers, createGrants, createRanks);
-        }).thenCompose(v -> {
-            // Initialize PlayerManager
-            playerManager = new PlayerManager(this, playerDao, grantDao, rankDao);
-            return playerManager.initialize();
-        }).thenRun(() -> {
+        // Initialize PlayerManager
+        playerManager = new PlayerManager(this, playerDao, grantDao, rankDao, wsManager);
+        playerManager.initialize().thenRun(() -> {
             getLogger().info("PlayerManager initialized!");
 
             // Save default config
@@ -98,16 +102,6 @@ public class BukkitPlugin extends JavaPlugin {
             // Register events
             getServer().getPluginManager().registerEvents(new ChatListener(this, playerManager), this);
             getServer().getPluginManager().registerEvents(new PlayerListener(this, playerManager), this);
-
-            // Register plugin messaging channel
-            Messenger messenger = getServer().getMessenger();
-            if (!messenger.isOutgoingChannelRegistered(this, "core:channel")) {
-                messenger.registerOutgoingPluginChannel(this, "core:channel");
-            }
-            if (!messenger.isIncomingChannelRegistered(this, "core:channel")) {
-                messenger.registerIncomingPluginChannel(this, "core:channel",
-                    new CorePluginMessageListener(this, playerManager));
-            }
 
             getLogger().info("Core Bukkit Plugin enabled!");
         }).exceptionally(e -> {
@@ -123,35 +117,30 @@ public class BukkitPlugin extends JavaPlugin {
             commandManager.unregisterCommands();
         }
 
-        // Unregister plugin messaging channels
-        Messenger messenger = getServer().getMessenger();
-        messenger.unregisterIncomingPluginChannel(this, "core:channel");
-        messenger.unregisterOutgoingPluginChannel(this, "core:channel");
+        // Disconnect WebSocket
+        if (wsManager != null) {
+            wsManager.disconnect();
+        }
 
         // Save all online players
         if (playerManager != null) {
             playerManager.shutdown().join();
         }
 
-        if (databaseManager != null) {
-            databaseManager.disconnect().join();
-        }
-
         getLogger().info("Core Bukkit Plugin disabled!");
     }
 
     /**
-     * Loads database configuration from config.yml
+     * Loads API configuration from config.yml
      *
-     * @return DatabaseConfig instance
+     * @return ApiConfig instance
      */
-    private DatabaseConfig loadDatabaseConfig() {
-        return new DatabaseConfig(
-                getConfig().getString("database.host", "localhost"),
-                getConfig().getInt("database.port", 3306),
-                getConfig().getString("database.name", "minecraft"),
-                getConfig().getString("database.user", "root"),
-                getConfig().getString("database.password", "")
+    private ApiConfig loadApiConfig() {
+        return new ApiConfig(
+                getConfig().getString("api.base-url", "http://localhost:3000/api"),
+                getConfig().getString("api.api-key", "your-secret-api-key-here"),
+                getConfig().getString("api.ws-url", "ws://localhost:3000/ws"),
+                getConfig().getString("api.server-name", "bukkit-server")
         );
     }
 

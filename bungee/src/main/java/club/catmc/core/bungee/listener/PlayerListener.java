@@ -44,14 +44,6 @@ public class PlayerListener implements Listener {
                     plugin.getLogger().warning("Failed to load profile for " + username + ": " + e.getMessage());
                     return null;
                 });
-
-        // Log to database
-        if (plugin.getDatabaseManager().isConnected()) {
-            plugin.getDatabaseManager().executeUpdate(
-                    "INSERT INTO player_joins (player, timestamp) VALUES ('" +
-                            username + "', NOW())"
-            );
-        }
     }
 
     /**

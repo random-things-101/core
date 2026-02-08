@@ -6,6 +6,7 @@ import club.catmc.core.shared.rank.Rank;
 import club.catmc.core.shared.rank.RankDao;
 import club.catmc.core.shared.player.PlayerDao;
 import club.catmc.core.shared.grant.GrantDao;
+import club.catmc.core.shared.ws.WebSocketManager;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,7 @@ public class PlayerManager {
     private final PlayerDao playerDao;
     private final GrantDao grantDao;
     private final RankDao rankDao;
+    private final WebSocketManager wsManager;
 
     // Cache of online players by UUID
     private final Map<UUID, Player> onlinePlayers;
@@ -39,12 +41,14 @@ public class PlayerManager {
      * @param playerDao The PlayerDao instance
      * @param grantDao The GrantDao instance
      * @param rankDao The RankDao instance
+     * @param wsManager The WebSocketManager instance
      */
-    public PlayerManager(BungeePlugin plugin, PlayerDao playerDao, GrantDao grantDao, RankDao rankDao) {
+    public PlayerManager(BungeePlugin plugin, PlayerDao playerDao, GrantDao grantDao, RankDao rankDao, WebSocketManager wsManager) {
         this.plugin = plugin;
         this.playerDao = playerDao;
         this.grantDao = grantDao;
         this.rankDao = rankDao;
+        this.wsManager = wsManager;
         this.onlinePlayers = new ConcurrentHashMap<>();
         this.rankCache = new ConcurrentHashMap<>();
     }
@@ -376,30 +380,14 @@ public class PlayerManager {
     }
 
     /**
-     * Notifies all Bukkit servers of a grant change for a player
+     * Notifies all servers of a grant change for a player via WebSocket
      *
      * @param uuid The player's UUID
      */
     private void notifyServersOfGrantChange(UUID uuid) {
-        ProxiedPlayer player = plugin.getProxy().getPlayer(uuid);
-        if (player == null || !player.isConnected()) {
-            return;
-        }
-
-        try {
-            java.io.ByteArrayOutputStream byteStream = new java.io.ByteArrayOutputStream();
-            java.io.DataOutputStream out = new java.io.DataOutputStream(byteStream);
-
-            // Write message type and UUID
-            out.writeUTF("GRANT_CHANGE");
-            out.writeUTF(uuid.toString());
-
-            // Send to all servers (player will forward it)
-            player.getServer().sendData("core:channel", byteStream.toByteArray());
-
-            log.info("[PlayerManager] Notified servers of grant change for " + player.getName());
-        } catch (java.io.IOException e) {
-            log.error("[PlayerManager] Failed to send grant change notification: " + e.getMessage());
+        if (wsManager != null && wsManager.isConnected()) {
+            wsManager.broadcastGrantChange(uuid);
+            log.info("[PlayerManager] Broadcast grant change notification for " + uuid);
         }
     }
 }

@@ -2,6 +2,8 @@ package club.catmc.core.bukkit.listener;
 
 import club.catmc.core.bukkit.BukkitPlugin;
 import club.catmc.core.bukkit.manager.PlayerManager;
+import club.catmc.core.shared.punishment.Punishment;
+import club.catmc.core.shared.punishment.PunishmentDao;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -10,7 +12,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
+import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Listens for and handles chat events
@@ -18,9 +23,11 @@ import java.util.UUID;
 public class ChatListener implements Listener {
 
     private final PlayerManager playerManager;
+    private final PunishmentDao punishmentDao;
 
     public ChatListener(BukkitPlugin plugin, PlayerManager playerManager) {
         this.playerManager = playerManager;
+        this.punishmentDao = plugin.getPunishmentDao();
     }
 
     /**
@@ -32,6 +39,37 @@ public class ChatListener implements Listener {
     public void onChat(AsyncChatEvent event) {
         Player bukkitPlayer = event.getPlayer();
         UUID uuid = bukkitPlayer.getUniqueId();
+
+        // Check if player is muted
+        try {
+            Optional<Punishment> mutePunishment = punishmentDao.getActiveMute(uuid).get();
+            if (mutePunishment.isPresent()) {
+                Punishment mute = mutePunishment.get();
+                event.setCancelled(true);
+
+                // Send mute message to player
+                Component muteMessage;
+                if (mute.isTemporary()) {
+                    LocalDateTime expiresAt = mute.getExpiresAt();
+                    String expiry = expiresAt != null ? expiresAt.toString() : "unknown";
+                    muteMessage = Component.text("You are muted until " + expiry)
+                            .color(NamedTextColor.RED);
+                } else {
+                    muteMessage = Component.text("You are permanently muted")
+                            .color(NamedTextColor.RED);
+                }
+
+                if (mute.getReason() != null && !mute.getReason().isEmpty()) {
+                    muteMessage = muteMessage.append(Component.text("\nReason: " + mute.getReason())
+                            .color(NamedTextColor.GRAY));
+                }
+
+                bukkitPlayer.sendMessage(muteMessage);
+                return;
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            // If we can't check mute status, allow chat
+        }
 
         // Get the player from cache
         club.catmc.core.shared.player.Player player = playerManager.getPlayer(uuid);

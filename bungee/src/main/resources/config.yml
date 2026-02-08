@@ -1,8 +1,7 @@
 # BungeeCord Plugin Configuration
 
-database:
-  host: localhost
-  port: 3306
-  name: minecraft
-  user: root
-  password: ""
+api:
+  base-url: "http://localhost:3000/api"
+  api-key: "your-secret-api-key-here"
+  ws-url: "ws://localhost:3000/ws"
+  server-name: "bungee-proxy"

@@ -3,15 +3,16 @@ package club.catmc.core.bungee;
 import club.catmc.core.bungee.commands.CoreCommand;
 import club.catmc.core.bungee.commands.MessageCommand;
 import club.catmc.core.bungee.commands.ReplyCommand;
-import club.catmc.core.bungee.config.DatabaseConfig;
+import club.catmc.core.bungee.config.ApiConfig;
 import club.catmc.core.bungee.listener.PlayerListener;
-import club.catmc.core.bungee.listener.PluginMessageListener;
 import club.catmc.core.bungee.manager.MessageManager;
 import club.catmc.core.bungee.manager.PlayerManager;
-import club.catmc.core.shared.db.DatabaseManager;
+import club.catmc.core.shared.api.ApiClient;
 import club.catmc.core.shared.grant.GrantDao;
+import club.catmc.core.shared.punishment.PunishmentDao;
 import club.catmc.core.shared.player.PlayerDao;
 import club.catmc.core.shared.rank.RankDao;
+import club.catmc.core.shared.ws.WebSocketManager;
 import co.aikar.commands.BungeeCommandManager;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.config.Configuration;
@@ -29,7 +30,8 @@ import java.util.concurrent.CompletableFuture;
  */
 public class BungeePlugin extends Plugin {
 
-    private DatabaseManager databaseManager;
+    private ApiClient apiClient;
+    private WebSocketManager wsManager;
     private BungeeCommandManager commandManager;
     private Configuration config;
     private PlayerManager playerManager;
@@ -37,9 +39,14 @@ public class BungeePlugin extends Plugin {
     private PlayerDao playerDao;
     private GrantDao grantDao;
     private RankDao rankDao;
+    private PunishmentDao punishmentDao;
 
-    public DatabaseManager getDatabaseManager() {
-        return databaseManager;
+    public ApiClient getApiClient() {
+        return apiClient;
+    }
+
+    public WebSocketManager getWsManager() {
+        return wsManager;
     }
 
     public BungeeCommandManager getCommandManager() {
@@ -62,6 +69,10 @@ public class BungeePlugin extends Plugin {
         return messageManager;
     }
 
+    public PunishmentDao getPunishmentDao() {
+        return punishmentDao;
+    }
+
     @Override
     public void onLoad() {
         getLogger().info("Loading Core Bungee Plugin...");
@@ -72,38 +83,32 @@ public class BungeePlugin extends Plugin {
         // Load configuration
         loadConfig();
 
-        // Load database configuration
-        DatabaseConfig dbConfig = loadDatabaseConfig();
+        // Load API configuration
+        ApiConfig apiConfig = loadApiConfig();
 
-        // Initialize database manager
-        databaseManager = new DatabaseManager(
-                dbConfig.getHost(),
-                dbConfig.getPort(),
-                dbConfig.getDatabase(),
-                dbConfig.getUsername(),
-                dbConfig.getPassword()
+        // Initialize API client
+        apiClient = new ApiClient(apiConfig.getBaseUrl(), apiConfig.getApiKey());
+        getLogger().info("ApiClient initialized with base URL: " + apiConfig.getBaseUrl());
+
+        // Initialize WebSocket client
+        wsManager = new WebSocketManager(
+            apiConfig.getWsUrl(),
+            "bungee",  // Explicit server type
+            apiConfig.getServerName(),
+            apiConfig.getApiKey()
         );
+        wsManager.connect();
+        getLogger().info("WebSocketManager initialized as 'bungee' proxy");
 
-        // Connect to database
-        databaseManager.connect().thenCompose(v -> {
-            getLogger().info("Database connection established!");
+        // Initialize DAOs with ApiClient
+        playerDao = new PlayerDao(apiClient);
+        grantDao = new GrantDao(apiClient);
+        rankDao = new RankDao(apiClient);
+        punishmentDao = new PunishmentDao(apiClient);
 
-            // Initialize DAOs
-            playerDao = new PlayerDao(databaseManager);
-            grantDao = new GrantDao(databaseManager);
-            rankDao = new RankDao(databaseManager);
-
-            // Create tables
-            CompletableFuture<Void> createPlayers = playerDao.createTable();
-            CompletableFuture<Void> createGrants = grantDao.createTable();
-            CompletableFuture<Void> createRanks = rankDao.createTable();
-
-            return CompletableFuture.allOf(createPlayers, createGrants, createRanks);
-        }).thenCompose(v -> {
-            // Initialize PlayerManager
-            playerManager = new PlayerManager(this, playerDao, grantDao, rankDao);
-            return playerManager.initialize();
-        }).thenRun(() -> {
+        // Initialize PlayerManager
+        playerManager = new PlayerManager(this, playerDao, grantDao, rankDao, wsManager);
+        playerManager.initialize().thenRun(() -> {
             getLogger().info("PlayerManager initialized!");
 
             // Initialize MessageManager
@@ -114,10 +119,6 @@ public class BungeePlugin extends Plugin {
 
             // Register events
             getProxy().getPluginManager().registerListener(this, new PlayerListener(this, playerManager));
-            getProxy().getPluginManager().registerListener(this, new PluginMessageListener(this, playerManager));
-
-            // Register plugin messaging channel
-            getProxy().registerChannel("core:channel");
 
             getLogger().info("Core Bungee Plugin enabled!");
         }).exceptionally(e -> {
@@ -133,13 +134,14 @@ public class BungeePlugin extends Plugin {
             commandManager.unregisterCommands();
         }
 
+        // Disconnect WebSocket
+        if (wsManager != null) {
+            wsManager.disconnect();
+        }
+
         // Save all online players
         if (playerManager != null) {
             playerManager.shutdown().join();
-        }
-
-        if (databaseManager != null) {
-            databaseManager.disconnect().join();
         }
 
         getLogger().info("Core Bungee Plugin disabled!");
@@ -174,17 +176,16 @@ public class BungeePlugin extends Plugin {
     }
 
     /**
-     * Loads database configuration from config.yml
+     * Loads API configuration from config.yml
      *
-     * @return DatabaseConfig instance
+     * @return ApiConfig instance
      */
-    private DatabaseConfig loadDatabaseConfig() {
-        return new DatabaseConfig(
-                config.getString("database.host", "localhost"),
-                config.getInt("database.port", 3306),
-                config.getString("database.name", "minecraft"),
-                config.getString("database.user", "root"),
-                config.getString("database.password", "")
+    private ApiConfig loadApiConfig() {
+        return new ApiConfig(
+                config.getString("api.base-url", "http://localhost:3000/api"),
+                config.getString("api.api-key", "your-secret-api-key-here"),
+                config.getString("api.ws-url", "ws://localhost:3000/ws"),
+                config.getString("api.server-name", "bungee-proxy")
         );
     }
 

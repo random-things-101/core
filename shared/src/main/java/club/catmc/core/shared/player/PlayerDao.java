@@ -1,12 +1,14 @@
 package club.catmc.core.shared.player;
 
-import club.catmc.core.shared.db.DatabaseManager;
+import club.catmc.core.shared.api.ApiClient;
+import club.catmc.core.shared.dto.PlayerDto;
+import com.google.gson.reflect.TypeToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.lang.reflect.Type;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -14,41 +16,26 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Data Access Object for Player operations
+ * Data Access Object for Player operations.
+ * Refactored to use REST API instead of direct database access.
  */
 public class PlayerDao {
 
     private static final Logger log = LoggerFactory.getLogger(PlayerDao.class);
-    private final DatabaseManager databaseManager;
+    private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    private final ApiClient apiClient;
 
-    public PlayerDao(DatabaseManager databaseManager) {
-        this.databaseManager = databaseManager;
+    public PlayerDao(ApiClient apiClient) {
+        this.apiClient = apiClient;
     }
 
     /**
-     * Creates the players table if it doesn't exist
+     * No-op - tables are managed by the API server.
      *
-     * @return CompletableFuture that completes when table is created
+     * @return CompletableFuture that completes immediately
      */
     public CompletableFuture<Void> createTable() {
-        String sql = """
-                CREATE TABLE IF NOT EXISTS players (
-                    uuid VARCHAR(36) PRIMARY KEY,
-                    username VARCHAR(16) NOT NULL,
-                    playtime_ticks BIGINT DEFAULT 0,
-                    first_login TIMESTAMP,
-                    last_login TIMESTAMP,
-                    is_online BOOLEAN DEFAULT FALSE,
-                    additional_permissions TEXT
-                )
-                """;
-
-        return databaseManager.executeUpdate(sql).thenRun(() ->
-                log.info("[PlayerDao] Created players table")
-        ).exceptionally(e -> {
-            log.error("[PlayerDao] Failed to create table: " + e.getMessage());
-            return null;
-        });
+        return CompletableFuture.completedFuture(null);
     }
 
     /**
@@ -58,25 +45,17 @@ public class PlayerDao {
      * @return CompletableFuture containing Optional<Player>
      */
     public CompletableFuture<Optional<Player>> findByUuid(UUID uuid) {
-        CompletableFuture<Optional<Player>> future = new CompletableFuture<>();
-
-        databaseManager.executeQuery(
-                "SELECT * FROM players WHERE uuid = '" + uuid.toString() + "'",
-                resultSet -> {
-                    try {
-                        if (resultSet.next()) {
-                            future.complete(Optional.of(mapResultSetToPlayer(resultSet)));
-                        } else {
-                            future.complete(Optional.empty());
+        return apiClient.get("/players/" + uuid.toString(), PlayerDto.class)
+                .thenApply(dto -> Optional.ofNullable(dto != null ? mapDtoToPlayer(dto) : null))
+                .exceptionally(e -> {
+                    if (e.getCause() instanceof ApiClient.ApiClientException) {
+                        ApiClient.ApiClientException ex = (ApiClient.ApiClientException) e.getCause();
+                        if (ex.getStatusCode() == 404) {
+                            return Optional.empty();
                         }
-                    } catch (SQLException e) {
-                        log.error("[PlayerDao] Error finding player: " + e.getMessage());
-                        future.completeExceptionally(e);
                     }
-                }
-        );
-
-        return future;
+                    throw new RuntimeException("Failed to find player", e);
+                });
     }
 
     /**
@@ -86,25 +65,17 @@ public class PlayerDao {
      * @return CompletableFuture containing Optional<Player>
      */
     public CompletableFuture<Optional<Player>> findByUsername(String username) {
-        CompletableFuture<Optional<Player>> future = new CompletableFuture<>();
-
-        databaseManager.executeQuery(
-                "SELECT * FROM players WHERE username = '" + username + "' LIMIT 1",
-                resultSet -> {
-                    try {
-                        if (resultSet.next()) {
-                            future.complete(Optional.of(mapResultSetToPlayer(resultSet)));
-                        } else {
-                            future.complete(Optional.empty());
+        return apiClient.get("/players/username/" + username, PlayerDto.class)
+                .thenApply(dto -> Optional.ofNullable(dto != null ? mapDtoToPlayer(dto) : null))
+                .exceptionally(e -> {
+                    if (e.getCause() instanceof ApiClient.ApiClientException) {
+                        ApiClient.ApiClientException ex = (ApiClient.ApiClientException) e.getCause();
+                        if (ex.getStatusCode() == 404) {
+                            return Optional.empty();
                         }
-                    } catch (SQLException e) {
-                        log.error("[PlayerDao] Error finding player by username: " + e.getMessage());
-                        future.completeExceptionally(e);
                     }
-                }
-        );
-
-        return future;
+                    throw new RuntimeException("Failed to find player by username", e);
+                });
     }
 
     /**
@@ -113,25 +84,17 @@ public class PlayerDao {
      * @return CompletableFuture containing List<Player>
      */
     public CompletableFuture<List<Player>> findOnlinePlayers() {
-        CompletableFuture<List<Player>> future = new CompletableFuture<>();
-        List<Player> players = new ArrayList<>();
-
-        databaseManager.executeQuery(
-                "SELECT * FROM players WHERE is_online = TRUE",
-                resultSet -> {
-                    try {
-                        while (resultSet.next()) {
-                            players.add(mapResultSetToPlayer(resultSet));
-                        }
-                        future.complete(players);
-                    } catch (SQLException e) {
-                        log.error("[PlayerDao] Error finding online players: " + e.getMessage());
-                        future.completeExceptionally(e);
+        Type listType = new TypeToken<List<PlayerDto>>() {}.getType();
+        return apiClient.get("/players/online", listType)
+                .thenApply(dtos -> {
+                    List<Player> players = new ArrayList<>();
+                    @SuppressWarnings("unchecked")
+                    List<PlayerDto> dtoList = (List<PlayerDto>) dtos;
+                    for (PlayerDto dto : dtoList) {
+                        players.add(mapDtoToPlayer(dto));
                     }
-                }
-        );
-
-        return future;
+                    return players;
+                });
     }
 
     /**
@@ -141,25 +104,17 @@ public class PlayerDao {
      * @return CompletableFuture containing List<Player>
      */
     public CompletableFuture<List<Player>> findTopByPlaytime(int limit) {
-        CompletableFuture<List<Player>> future = new CompletableFuture<>();
-        List<Player> players = new ArrayList<>();
-
-        databaseManager.executeQuery(
-                "SELECT * FROM players ORDER BY playtime_ticks DESC LIMIT " + limit,
-                resultSet -> {
-                    try {
-                        while (resultSet.next()) {
-                            players.add(mapResultSetToPlayer(resultSet));
-                        }
-                        future.complete(players);
-                    } catch (SQLException e) {
-                        log.error("[PlayerDao] Error finding top players: " + e.getMessage());
-                        future.completeExceptionally(e);
+        Type listType = new TypeToken<List<PlayerDto>>() {}.getType();
+        return apiClient.get("/players/top-playtime/" + limit, listType)
+                .thenApply(dtos -> {
+                    List<Player> players = new ArrayList<>();
+                    @SuppressWarnings("unchecked")
+                    List<PlayerDto> dtoList = (List<PlayerDto>) dtos;
+                    for (PlayerDto dto : dtoList) {
+                        players.add(mapDtoToPlayer(dto));
                     }
-                }
-        );
-
-        return future;
+                    return players;
+                });
     }
 
     /**
@@ -169,32 +124,17 @@ public class PlayerDao {
      * @return CompletableFuture that completes when saved
      */
     public CompletableFuture<Void> save(Player player) {
-        String permissions = player.getAdditionalPermissions() != null
-                ? String.join(",", player.getAdditionalPermissions())
-                : "";
-
-        String sql = String.format(
-                "INSERT INTO players (uuid, username, playtime_ticks, first_login, last_login, is_online, additional_permissions) " +
-                        "VALUES ('%s', '%s', %d, %s, %s, %b, '%s') " +
-                        "ON DUPLICATE KEY UPDATE " +
-                        "username = '%s', playtime_ticks = %d, " +
-                        "first_login = %s, last_login = %s, is_online = %b, additional_permissions = '%s'",
-                player.getUuid().toString(), player.getUsername(), player.getPlaytimeTicks(),
-                timestampToSql(player.getFirstLogin()),
-                timestampToSql(player.getLastLogin()),
-                player.isOnline(), permissions,
-                player.getUsername(), player.getPlaytimeTicks(),
-                timestampToSql(player.getFirstLogin()),
-                timestampToSql(player.getLastLogin()),
-                player.isOnline(), permissions
+        PlayerDto dto = new PlayerDto(
+                player.getUuid().toString(),
+                player.getUsername(),
+                player.getPlaytimeTicks(),
+                player.getFirstLogin() != null ? player.getFirstLogin().format(ISO_FORMATTER) : null,
+                player.getLastLogin() != null ? player.getLastLogin().format(ISO_FORMATTER) : null,
+                player.isOnline(),
+                player.getAdditionalPermissions()
         );
-
-        return databaseManager.executeUpdate(sql).thenRun(() ->
-                log.info("[PlayerDao] Saved player: " + player.getUsername())
-        ).exceptionally(e -> {
-            log.error("[PlayerDao] Failed to save player: " + e.getMessage());
-            return null;
-        });
+        return apiClient.post("/players", dto, PlayerDto.SuccessResponse.class)
+                .thenRun(() -> log.info("[PlayerDao] Saved player: " + player.getUsername()));
     }
 
     /**
@@ -204,14 +144,8 @@ public class PlayerDao {
      * @return CompletableFuture that completes when deleted
      */
     public CompletableFuture<Void> deleteByUuid(UUID uuid) {
-        return databaseManager.executeUpdate(
-                "DELETE FROM players WHERE uuid = '" + uuid.toString() + "'"
-        ).thenRun(() ->
-                log.info("[PlayerDao] Deleted player: " + uuid)
-        ).exceptionally(e -> {
-            log.error("[PlayerDao] Failed to delete player: " + e.getMessage());
-            return null;
-        });
+        return apiClient.delete("/players/" + uuid.toString())
+                .thenRun(() -> log.info("[PlayerDao] Deleted player: " + uuid));
     }
 
     /**
@@ -222,81 +156,72 @@ public class PlayerDao {
      * @return CompletableFuture that completes when updated
      */
     public CompletableFuture<Void> updateOnlineStatus(UUID uuid, boolean online) {
-        return databaseManager.executeUpdate(
-                "UPDATE players SET is_online = " + online + ", last_login = " + getCurrentTimestamp() +
-                        " WHERE uuid = '" + uuid.toString() + "'"
-        ).thenRun(() ->
-                log.info("[PlayerDao] Updated online status for: " + uuid)
-        ).exceptionally(e -> {
-            log.error("[PlayerDao] Failed to update online status: " + e.getMessage());
-            return null;
-        });
+        // Note: The API returns a success response, we ignore it
+        return apiClient.put("/players/" + uuid.toString() + "/online",
+                new OnlineStatusRequest(online), PlayerDto.SuccessResponse.class)
+                .thenRun(() -> log.info("[PlayerDao] Updated online status for: " + uuid));
     }
 
     /**
      * Increments a player's playtime
      *
-     * @param uuid   The player's UUID
-     * @param ticks  Number of ticks to add
+     * @param uuid  The player's UUID
+     * @param ticks Number of ticks to add
      * @return CompletableFuture that completes when updated
      */
     public CompletableFuture<Void> incrementPlaytime(UUID uuid, long ticks) {
-        return databaseManager.executeUpdate(
-                "UPDATE players SET playtime_ticks = playtime_ticks + " + ticks +
-                        " WHERE uuid = '" + uuid.toString() + "'"
-        ).exceptionally(e -> {
-            log.error("[PlayerDao] Failed to increment playtime: " + e.getMessage());
-            return null;
-        });
+        return apiClient.post("/players/" + uuid.toString() + "/playtime",
+                new PlaytimeIncrementRequest(ticks), PlayerDto.SuccessResponse.class)
+                .thenRun(() -> {});
     }
 
     /**
-     * Maps a ResultSet to a Player object
+     * Maps a PlayerDto to a Player domain object
      */
-    private Player mapResultSetToPlayer(ResultSet resultSet) throws SQLException {
-        String permissionsStr = resultSet.getString("additional_permissions");
-        List<String> permissions = new ArrayList<>();
-
-        if (permissionsStr != null && !permissionsStr.isEmpty()) {
-            String[] parts = permissionsStr.split(",");
-            for (String part : parts) {
-                if (!part.isEmpty()) {
-                    permissions.add(part);
-                }
-            }
-        }
-
+    private Player mapDtoToPlayer(PlayerDto dto) {
         Player player = new Player(
-                UUID.fromString(resultSet.getString("uuid")),
-                resultSet.getString("username")
+                UUID.fromString(dto.getUuid()),
+                dto.getUsername()
         );
-        player.setPlaytimeTicks(resultSet.getLong("playtime_ticks"));
-        player.setFirstLogin(resultSet.getTimestamp("first_login") != null
-                ? resultSet.getTimestamp("first_login").toLocalDateTime()
-                : null);
-        player.setLastLogin(resultSet.getTimestamp("last_login") != null
-                ? resultSet.getTimestamp("last_login").toLocalDateTime()
-                : null);
-        player.setOnline(resultSet.getBoolean("is_online"));
-        player.setAdditionalPermissions(permissions);
-
+        player.setPlaytimeTicks(dto.getPlaytimeTicks() != null ? dto.getPlaytimeTicks() : 0L);
+        if (dto.getFirstLogin() != null) {
+            player.setFirstLogin(LocalDateTime.parse(dto.getFirstLogin(), ISO_FORMATTER));
+        }
+        if (dto.getLastLogin() != null) {
+            player.setLastLogin(LocalDateTime.parse(dto.getLastLogin(), ISO_FORMATTER));
+        }
+        player.setOnline(dto.getIsOnline() != null ? dto.getIsOnline() : false);
+        player.setAdditionalPermissions(dto.getAdditionalPermissions());
         return player;
     }
 
     /**
-     * Converts a LocalDateTime to SQL timestamp string
+     * Request wrapper for online status updates
      */
-    private String timestampToSql(LocalDateTime dateTime) {
-        if (dateTime == null) {
-            return "NULL";
+    private static class OnlineStatusRequest {
+        private final boolean isOnline;
+
+        public OnlineStatusRequest(boolean isOnline) {
+            this.isOnline = isOnline;
         }
-        return "'" + dateTime.toString() + "'";
+
+        public boolean isOnline() {
+            return isOnline;
+        }
     }
 
     /**
-     * Gets current timestamp as SQL string
+     * Request wrapper for playtime increments
      */
-    private String getCurrentTimestamp() {
-        return "NOW()";
+    private static class PlaytimeIncrementRequest {
+        private final long ticks;
+
+        public PlaytimeIncrementRequest(long ticks) {
+            this.ticks = ticks;
+        }
+
+        public long getTicks() {
+            return ticks;
+        }
     }
 }
